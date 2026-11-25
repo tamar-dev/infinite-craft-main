@@ -2,7 +2,7 @@ import { copyFile } from "../_shared/proxy/drive.ts";
 import { ProxyError } from "../_shared/proxy/engine.ts";
 import { verifyGoogleToken, RateLimiter } from "../_shared/proxy/auth.ts";
 const ingress = new RateLimiter(120, 60000);
-const users = new RateLimiter(10, 60000);
+import { takeDistributed, userBucket } from "../_shared/proxy/rate-limit.ts";
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
   const clientId = Deno.env.get("DRIVE_COPY_OAUTH_CLIENT_ID");
@@ -36,8 +36,11 @@ Deno.serve(async (req) => {
     try { data = JSON.parse(raw); } catch { return reply({error:"Invalid JSON"},400); }
     if (typeof data?.link !== "string" || data.link.length > 4096) return reply({error:"Link required"},400);
     if (!ingress.take("global")) return reply({error:"Too many requests"},429);
+    const url = Deno.env.get("SUPABASE_URL") ?? "";
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    if (!await takeDistributed("drive-copy:global",120,url,key)) return reply({error:"Too many requests"},429);
     const subject = await verifyGoogleToken(token,clientId!);
-    if (!users.take(subject)) return reply({error:"Too many requests"},429);
+    if (!await takeDistributed(await userBucket(subject),10,url,key)) return reply({error:"Too many requests"},429);
     return reply(await copyFile(data.link,token));
   } catch (error) {
     return error instanceof ProxyError ? reply({error:error.message},error.status) : reply({error:"Request failed"},500);
