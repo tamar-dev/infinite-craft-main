@@ -1,11 +1,15 @@
 import { copyFile } from "../_shared/proxy/drive.ts";
 import { ProxyError } from "../_shared/proxy/engine.ts";
+import { verifyGoogleToken, RateLimiter } from "../_shared/proxy/auth.ts";
+const ingress = new RateLimiter(120, 60000);
+const users = new RateLimiter(10, 60000);
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
+  const clientId = Deno.env.get("DRIVE_COPY_OAUTH_CLIENT_ID");
   const allowed = Deno.env.get("DRIVE_COPY_EXTENSION_ORIGIN");
   const headers = new Headers({"Content-Type":"application/json","Cache-Control":"no-store","Vary":"Origin"});
   const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), {status,headers});
-  if (!allowed || !/^chrome-extension:\/\/[a-p]{32}$/.test(allowed)) return reply({error:"Service not configured"},503);
+  if (!clientId || !allowed || !/^chrome-extension:\/\/[a-p]{32}$/.test(allowed)) return reply({error:"Service not configured"},503);
   if (origin && origin !== allowed) return reply({error:"Origin not allowed"},403);
   headers.set("Access-Control-Allow-Origin",allowed);
   headers.set("Access-Control-Allow-Methods","POST, OPTIONS");
@@ -31,6 +35,9 @@ Deno.serve(async (req) => {
     let data;
     try { data = JSON.parse(raw); } catch { return reply({error:"Invalid JSON"},400); }
     if (typeof data?.link !== "string" || data.link.length > 4096) return reply({error:"Link required"},400);
+    if (!ingress.take("global")) return reply({error:"Too many requests"},429);
+    const subject = await verifyGoogleToken(token,clientId!);
+    if (!users.take(subject)) return reply({error:"Too many requests"},429);
     return reply(await copyFile(data.link,token));
   } catch (error) {
     return error instanceof ProxyError ? reply({error:error.message},error.status) : reply({error:"Request failed"},500);
