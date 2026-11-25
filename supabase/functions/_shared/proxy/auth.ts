@@ -16,7 +16,22 @@ export async function verifyGoogleToken(token: string, clientId: string, request
   const party = data?.azp ?? data?.issued_to;
   if (audience !== clientId || (party !== undefined && party !== clientId) ||
       !(Number(data?.expires_in) > 0)) throw new ProxyError(401, "Invalid token audience or expiry");
-  const subject = data?.sub ?? data?.user_id;
+  let subject = data?.sub ?? data?.user_id;
+  if (typeof subject !== "string" || !subject) {
+    let about: Response;
+    try {
+      about = await request("https://www.googleapis.com/drive/v3/about?fields=user(permissionId)", {
+        headers: {Authorization: "Bearer " + token},
+        redirect: "error", signal: AbortSignal.timeout(8000), cache: "no-store"
+      });
+    } catch { throw new ProxyError(503, "Drive identity verification unavailable"); }
+    if (!about.ok) {
+      await about.body?.cancel();
+      throw new ProxyError(about.status === 401 ? 401 : about.status === 403 ? 403 : 503, "Drive identity verification failed");
+    }
+    const identity = await about.json().catch(() => null);
+    subject = identity?.user?.permissionId;
+  }
   if (typeof subject !== "string" || !subject || subject.length > 256)
     throw new ProxyError(401, "Token subject unavailable");
   return subject;
