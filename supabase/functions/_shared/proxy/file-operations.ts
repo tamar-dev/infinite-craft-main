@@ -11,7 +11,7 @@ export async function getExport(id:string,token:string,request:typeof fetch=fetc
  id=validateId(id);
  const r=await google("https://www.googleapis.com/drive/v3/files/"+id+"?fields=id,name,mimeType,owners(me),capabilities(canDownload),trashed&supportsAllDrives=true",token,{},request);
  const meta=await r.json();
- if(meta.trashed||meta.owners?.[0]?.me!==true)throw new ProxyError(403,"File must be owned by you");
+ if(meta.trashed||!Array.isArray(meta.owners)||!meta.owners.some((owner:{me?:boolean})=>owner.me===true))throw new ProxyError(403,"File must be owned by you");
  if(meta.capabilities?.canDownload===false)throw new ProxyError(403,"Downloading is not permitted");
  const types:Record<string,{mime:string;ext:string}>={
  "application/vnd.google-apps.document":{mime:"application/vnd.openxmlformats-officedocument.wordprocessingml.document",ext:".docx"},
@@ -28,7 +28,7 @@ export async function trashFile(id:unknown,token:string,request:typeof fetch=fet
  id=validateId(id);
  const meta=await google("https://www.googleapis.com/drive/v3/files/"+id+"?fields=owners(me),trashed&supportsAllDrives=true",token,{},request);
  const data=await meta.json();
- if(data.owners?.[0]?.me!==true)throw new ProxyError(403,"File must be owned by you");
+ if(!Array.isArray(data.owners)||!data.owners.some((owner:{me?:boolean})=>owner.me===true))throw new ProxyError(403,"File must be owned by you");
  if(data.trashed)return {trashed:true};
  await google("https://www.googleapis.com/drive/v3/files/"+id+"?supportsAllDrives=true",token,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({trashed:true})},request);
  return {trashed:true};
