@@ -75,6 +75,8 @@ export async function handleOperation(repo:OperationRepository,subject:string,to
       return reply(view(await clean(op)));
     }
     if(payload.action==="recover"){
+      if(op.state==="cancel_requested"&&op.result_id)
+        op=await repo.transition(id,subject,"cancel_requested","cleaning")??await get();
       if(["cleaning","finalizing"].includes(op.state))return reply(view(await clean(op)));
       if(!["dispatching","uncertain","cancel_requested"].includes(op.state))return reply(view(op));
       const copies=await deps.find(id,token);
