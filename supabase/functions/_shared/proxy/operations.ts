@@ -1,4 +1,4 @@
-export type OperationState = "pending" | "running" | "cancel_requested" | "cleaning" | "cancelled" | "succeeded" | "failed" | "cleanup_failed" | "ready" | "finalizing" | "uncertain";
+export type OperationState = "pending" | "running" | "cancel_requested" | "cleaning" | "cancelled" | "succeeded" | "failed" | "cleanup_failed" | "ready" | "finalizing" | "uncertain" | "dispatching";
 export type OperationMode = "copy" | "download" | "both";
 export interface Operation {
   id: string;
@@ -13,7 +13,8 @@ export interface Operation {
 }
 const transitions: Record<OperationState, OperationState[]> = {
   pending: ["running", "cancelled", "failed"],
-  running: ["cancel_requested", "succeeded", "ready", "failed", "uncertain"],
+  running: ["dispatching", "cancelled", "failed", "cancel_requested"],
+  dispatching: ["cancel_requested", "succeeded", "ready", "uncertain"],
   uncertain: ["cancel_requested", "succeeded", "ready"],
   ready: ["cancel_requested", "succeeded", "finalizing"],
   finalizing: ["succeeded"],
