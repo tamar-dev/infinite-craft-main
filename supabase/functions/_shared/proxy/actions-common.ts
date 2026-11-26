@@ -31,6 +31,8 @@ export async function authorize(req:Request,clientId:string,kind:string) {
  const url=Deno.env.get("SUPABASE_URL")??"",key=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")??"";
  if(!await takeDistributed(kind+":global",120,url,key))throw new ProxyError(429,"Too many requests");
  const subject=await verifyGoogleToken(token,clientId);
- if(!await takeDistributed((await userBucket(subject))+":"+kind,10,url,key))throw new ProxyError(429,"Too many requests");
+ const userKind=kind==="drive-operation"?(payload?.action==="start"?"drive-operation:start":"drive-operation:control"):kind;
+ const userLimit=userKind==="drive-operation:control"?60:10;
+ if(!await takeDistributed((await userBucket(subject))+":"+userKind,userLimit,url,key))throw new ProxyError(429,"Too many requests");
  return {token,payload,subject};
 }
