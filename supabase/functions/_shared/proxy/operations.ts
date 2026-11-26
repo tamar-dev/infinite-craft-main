@@ -51,4 +51,28 @@ export class OperationRepository {
     return (await this.query<Operation>("drive_operations", params, "PATCH",
       { state: to, updated_at: new Date().toISOString() }))[0] ?? null;
   }
+
+  // Only trusted server code may register IDs returned by Google Drive.
+  async recordFile(id: string, owner: string, fileId: string): Promise<void> {
+    if (!/^[A-Za-z0-9_-]{1,256}$/.test(fileId)) throw new Error("Invalid Drive file ID");
+    const operation = await this.get(id, owner);
+    if (!operation || !["running", "cancel_requested"].includes(operation.state))
+      throw new Error("Operation not accepting files");
+    await this.query("drive_operation_files", new URLSearchParams(), "POST",
+      { operation_id: id, file_id: fileId });
+  }
+  async listPendingFiles(id: string, owner: string): Promise<string[]> {
+    if (!await this.get(id, owner)) throw new Error("Operation not found");
+    const rows = await this.query<{file_id: string}>("drive_operation_files",
+      new URLSearchParams({ operation_id: "eq." + id, cleaned_at: "is.null", select: "file_id", order: "created_at.desc,file_id.desc", limit: "100" }));
+    return rows.map(row => row.file_id);
+  }
+  async markCleaned(id: string, owner: string, fileId: string): Promise<void> {
+    const operation = await this.get(id, owner);
+    if (!operation || operation.state !== "cleaning") throw new Error("Operation not cleaning");
+    const rows = await this.query("drive_operation_files",
+      new URLSearchParams({ operation_id: "eq." + id, file_id: "eq." + fileId }), "PATCH",
+      { cleaned_at: new Date().toISOString() });
+    if (!rows.length) throw new Error("File not registered");
+  }
 }
