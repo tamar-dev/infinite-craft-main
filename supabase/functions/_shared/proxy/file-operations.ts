@@ -7,11 +7,12 @@ async function google(url:string,token:string,init:RequestInit={},request:typeof
  if(!r.ok){const status=[401,403,404,429].includes(r.status)?r.status:502;await r.body?.cancel();throw new ProxyError(status,"Drive API request failed ("+r.status+")");}
  return r;
 }
-export async function getExport(id:string,token:string,request:typeof fetch=fetch) {
+export async function getExport(id:string,token:string,request:typeof fetch=fetch,operationId?:string) {
  id=validateId(id);
- const r=await google("https://www.googleapis.com/drive/v3/files/"+id+"?fields=id,name,mimeType,owners(me),capabilities(canDownload),trashed&supportsAllDrives=true",token,{},request);
+ const r=await google("https://www.googleapis.com/drive/v3/files/"+id+"?fields=id,name,mimeType,owners(me),capabilities(canDownload),trashed,appProperties&supportsAllDrives=true",token,{},request);
  const meta=await r.json();
  if(meta.trashed||!Array.isArray(meta.owners)||!meta.owners.some((owner:{me?:boolean})=>owner.me===true))throw new ProxyError(403,"File must be owned by you");
+ if(operationId&&meta.appProperties?.copyToMyDriveOperation!==operationId)throw new ProxyError(403,"File does not belong to this operation");
  if(meta.capabilities?.canDownload===false)throw new ProxyError(403,"Downloading is not permitted");
  const types:Record<string,{mime:string;ext:string}>={
  "application/vnd.google-apps.document":{mime:"application/vnd.openxmlformats-officedocument.wordprocessingml.document",ext:".docx"},
