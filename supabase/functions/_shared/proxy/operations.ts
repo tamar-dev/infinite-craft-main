@@ -1,4 +1,4 @@
-export type OperationState = "pending" | "running" | "cancel_requested" | "cleaning" | "cancelled" | "succeeded" | "failed" | "cleanup_failed";
+export type OperationState = "pending" | "running" | "cancel_requested" | "cleaning" | "cancelled" | "succeeded" | "failed" | "cleanup_failed" | "ready" | "finalizing" | "uncertain";
 export type OperationMode = "copy" | "download" | "both";
 export interface Operation {
   id: string;
@@ -8,11 +8,16 @@ export interface Operation {
   state: OperationState;
   completed_items: number;
   total_items: number | null;
+  result_id?: string | null;
+  result_name?: string | null;
 }
 const transitions: Record<OperationState, OperationState[]> = {
   pending: ["running", "cancelled", "failed"],
-  running: ["cancel_requested", "succeeded", "failed"],
-  cancel_requested: ["cleaning"],
+  running: ["cancel_requested", "succeeded", "ready", "failed", "uncertain"],
+  uncertain: ["cancel_requested", "succeeded", "ready"],
+  ready: ["cancel_requested", "succeeded", "finalizing"],
+  finalizing: ["succeeded"],
+  cancel_requested: ["cleaning", "cancelled"],
   cleaning: ["cancelled", "cleanup_failed"],
   cleanup_failed: ["cleaning"],
   cancelled: [], succeeded: [], failed: []
@@ -44,12 +49,12 @@ export class OperationRepository {
     if (!rows[0]) throw new Error("Operation creation failed");
     return rows[0];
   }
-  async transition(id: string, owner: string, from: OperationState, to: OperationState): Promise<Operation | null> {
+  async transition(id: string, owner: string, from: OperationState, to: OperationState, result?: {id:string;name:string}): Promise<Operation | null> {
     if (!transitions[from]?.includes(to)) throw new Error("Invalid operation transition");
     const params = this.scope(id, owner);
     params.set("state", "eq." + from);
     return (await this.query<Operation>("drive_operations", params, "PATCH",
-      { state: to, updated_at: new Date().toISOString() }))[0] ?? null;
+      { state: to, updated_at: new Date().toISOString(), ...(result ? {result_id:result.id,result_name:result.name,completed_items:1,total_items:1} : {}) }))[0] ?? null;
   }
 
   // Only trusted server code may register IDs returned by Google Drive.
