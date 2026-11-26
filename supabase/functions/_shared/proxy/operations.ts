@@ -10,7 +10,7 @@ export interface Operation {
   total_items: number | null;
 }
 const transitions: Record<OperationState, OperationState[]> = {
-  pending: ["running", "cancel_requested", "failed"],
+  pending: ["running", "cancelled", "failed"],
   running: ["cancel_requested", "succeeded", "failed"],
   cancel_requested: ["cleaning"],
   cleaning: ["cancelled", "cleanup_failed"],
