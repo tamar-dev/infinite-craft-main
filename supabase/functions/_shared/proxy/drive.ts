@@ -16,7 +16,8 @@ export function parseLink(value: string) {
   if (key && !/^[\w-]{1,256}$/.test(key)) throw new ProxyError(400, "Invalid resource key");
   return {id,key};
 }
-export async function copyFile(link: string, token: string, request: typeof fetch = fetch) {
+export async function copyFile(link: string, token: string, request: typeof fetch = fetch, operationId?: string) {
+  if (operationId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operationId)) throw new ProxyError(400, "Invalid operation ID");
   const {id,key} = parseLink(link);
   const headers = new Headers({Authorization: "Bearer " + token});
   if (key) headers.set("X-Goog-Drive-Resource-Keys", id + "/" + key);
@@ -36,5 +37,5 @@ export async function copyFile(link: string, token: string, request: typeof fetc
   if (!meta.capabilities?.canCopy) throw new ProxyError(403, "Copying is not permitted");
   if (typeof meta.name !== "string") throw new ProxyError(502, "Invalid Drive metadata");
   headers.set("Content-Type", "application/json");
-  return call(base + "/copy?fields=id,name,webViewLink&supportsAllDrives=true", {method:"POST", headers, body:JSON.stringify({name:meta.name,parents:["root"]})});
+  return call(base + "/copy?fields=id,name,webViewLink&supportsAllDrives=true", {method:"POST", headers, body:JSON.stringify({name:meta.name,parents:["root"],...(operationId ? {appProperties:{copyToMyDriveOperation:operationId}} : {})})});
 }
