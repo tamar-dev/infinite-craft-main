@@ -49,7 +49,7 @@ Deno.test("duplicate starts claim at most one copy",async()=>{
   const entered=gate(),release=gate(),original=f.deps.copy;
   f.deps.copy=async(...args)=>{const file=await original(...args);entered.open();await release.promise;return file;};
   const first=f.call("start");await entered.promise;
-  equal((await f.call("start")).state,"running");release.open();
+  equal((await f.call("start")).state,"dispatching");release.open();
   equal((await first).state,"succeeded");equal(f.log.copies,1);
   equal((await f.call("status")).file.id,f.file.id);
 });
@@ -93,4 +93,19 @@ Deno.test("wrong operation marker never reaches Drive PATCH",async()=>{
   const request:typeof fetch=async(_url,init)=>{requests++;equal(init?.method,undefined);return Response.json({owners:[{me:true}],appProperties:{copyToMyDriveOperation:"other"}});};
   let rejected=false;try{await trashOperationFile("file",id,"token",request);}catch{rejected=true;}
   equal(rejected,true);equal(requests,1);
+});
+
+Deno.test("cancel during metadata preflight prevents dispatch",async()=>{
+  const f=fixture();await f.prepare();
+  const entered=gate(),release=gate(),original=f.deps.copy;
+  f.deps.copy=async(...args)=>{entered.open();await release.promise;return original(...args);};
+  const start=f.call("start");await entered.promise;
+  equal((await f.call("cancel")).state,"cancelled");release.open();
+  equal((await start).state,"cancelled");equal(f.log.copies,0);
+});
+Deno.test("a stranded preflight can be resumed without repeating a Google write",async()=>{
+  const f=fixture();await f.prepare();
+  await f.repo.transition(id,"owner","pending","running");
+  equal((await f.call("start")).state,"succeeded");equal(f.log.copies,1);
+  equal((await f.call("start")).state,"succeeded");equal(f.log.copies,1);
 });
