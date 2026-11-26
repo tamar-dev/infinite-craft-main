@@ -101,9 +101,12 @@ Deno.serve(async req => {
       return c.reply(view(await settle(file)));
     }catch(error){
       if(!dispatched){
-        op=await get();
-        if(op.state==="running")await repo.transition(id,subject,"running","failed");
-        else if(op.state==="cancel_requested")await repo.transition(id,subject,"cancel_requested","cancelled");
+        for(let attempt=0;attempt<8;attempt++){
+          op=await get();
+          if(op.state!=="running"&&op.state!=="cancel_requested")break;
+          const next=op.state==="running"?"failed":"cancelled";
+          if(await repo.transition(id,subject,op.state,next))break;
+        }
         op=await get();
         if(op.state==="failed")return c.reply({...view(op),error:error instanceof ProxyError?error.message:"Copy failed"});
       }else{
