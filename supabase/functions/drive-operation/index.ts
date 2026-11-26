@@ -2,6 +2,7 @@ import { authorize, cors } from "../_shared/proxy/actions-common.ts";
 import { OperationRepository } from "../_shared/proxy/operations.ts";
 import { requestCancellation, cleanupAfterWorkerStopped } from "../_shared/proxy/operation-cancel.ts";
 import { copyFile, parseLink } from "../_shared/proxy/drive.ts";
+import { findOperationCopies } from "../_shared/proxy/operation-reconcile.ts";
 import { ProxyError } from "../_shared/proxy/engine.ts";
 Deno.serve(async req => {
   const c = cors(req);
@@ -11,9 +12,14 @@ Deno.serve(async req => {
     const id = payload?.operationId;
     if (typeof id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return c.reply({error:"Invalid operation ID"},400);
     const repo = new OperationRepository(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    if (payload.action === "status" || payload.action === "cancel") {
+    if (payload.action === "status" || payload.action === "cancel" || payload.action === "recover") {
       const op = await repo.get(id,subject);
       if (!op) return c.reply({error:"Operation not found"},404);
+      if (payload.action === "recover") {
+        // Read-only reconciliation: never race a live worker or retry an ambiguous copy.
+        const copies = await findOperationCopies(id,token);
+        return c.reply({operationId:id,state:op.state,observedCopies:copies,confirmed:false});
+      }
       const state = payload.action === "cancel" ? await requestCancellation(repo,id,subject) : op.state;
       return c.reply({operationId:id,state});
     }
