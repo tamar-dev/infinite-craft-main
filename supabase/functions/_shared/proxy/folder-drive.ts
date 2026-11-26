@@ -67,7 +67,13 @@ export function folderDrive(token:string,request:typeof fetch=fetch){
    }while(pageToken);
    return [...ids];
   },
-  trash:(id:string,operationId:string)=>trashOperationFile(id,operationId,token,request)
+  async trash(id:string,operationId:string,isFolder:boolean){
+   if(isFolder){
+    const page=await call("/drive/v3/files",{q:"'"+id+"' in parents and trashed = false",fields:"incompleteSearch,nextPageToken,files(id)",pageSize:"1",supportsAllDrives:"true",includeItemsFromAllDrives:"true"});
+    if(page.incompleteSearch||page.nextPageToken||!Array.isArray(page.files)||page.files.length)throw Error("Refusing to trash nonempty destination folder");
+   }
+   await trashOperationFile(id,operationId,token,request);
+  }
  };
 }
 export type FolderDrive=ReturnType<typeof folderDrive>;
