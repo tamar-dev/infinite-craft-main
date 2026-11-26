@@ -38,7 +38,7 @@ export async function handleOperation(repo:OperationRepository,subject:string,to
       for(let i=0;i<8;i++){
         const op=await get();
         if(op.result_id && op.result_id!==result.id) throw new Error("Conflicting operation result");
-        if(op.state==="running"||op.state==="uncertain"||op.state==="cancel_requested"){
+        if(op.state==="dispatching"||op.state==="uncertain"||op.state==="cancel_requested"){
           const next=op.state==="cancel_requested"?"cleaning":op.mode==="copy"?"succeeded":"ready";
           const changed=await repo.transition(id,subject,op.state,next,result);
           if(changed)return await clean(changed);
@@ -63,9 +63,9 @@ export async function handleOperation(repo:OperationRepository,subject:string,to
     if(payload.action==="cancel"){
       for(let i=0;i<8;i++){
         op=await get();
-        if(op.state==="pending"){
-          if(await repo.transition(id,subject,"pending","cancelled"))break;
-        }else if(["running","uncertain","ready"].includes(op.state)){
+        if(op.state==="pending"||op.state==="running"){
+          if(await repo.transition(id,subject,op.state,"cancelled"))break;
+        }else if(["dispatching","uncertain","ready"].includes(op.state)){
           if(await repo.transition(id,subject,op.state,"cancel_requested"))break;
         }else break;
       }
@@ -76,7 +76,7 @@ export async function handleOperation(repo:OperationRepository,subject:string,to
     }
     if(payload.action==="recover"){
       if(["cleaning","finalizing"].includes(op.state))return reply(view(await clean(op)));
-      if(!["running","uncertain","cancel_requested"].includes(op.state))return reply(view(op));
+      if(!["dispatching","uncertain","cancel_requested"].includes(op.state))return reply(view(op));
       const copies=await deps.find(id,token);
       if(copies.length===1){
         const file=await deps.inspect(copies[0],id,token);
@@ -93,12 +93,12 @@ export async function handleOperation(repo:OperationRepository,subject:string,to
       return reply(view(await clean(op)));
     }
     if(payload.action!=="start")return reply({error:"Invalid action"},400);
-    const claimed=await repo.transition(id,subject,"pending","running");
+    const claimed=op.state==="running"?op:await repo.transition(id,subject,"pending","running");
     if(!claimed)return reply(view(await get()));
     let dispatched=false;
     try{
       const file=await deps.copy(claimed.source_link,token,fetch,id,async()=>{
-        if((await get()).state!=="running")throw new Error("Cancelled before dispatch");
+        if(!await repo.transition(id,subject,"running","dispatching"))throw new Error("Copy already claimed or cancelled");
         dispatched=true;
       });
       return reply(view(await settle(file)));
@@ -106,14 +106,13 @@ export async function handleOperation(repo:OperationRepository,subject:string,to
       if(!dispatched){
         for(let attempt=0;attempt<8;attempt++){
           op=await get();
-          if(op.state!=="running"&&op.state!=="cancel_requested")break;
-          const next=op.state==="running"?"failed":"cancelled";
-          if(await repo.transition(id,subject,op.state,next))break;
+          if(op.state!=="running")break;
+          if(await repo.transition(id,subject,"running","failed"))break;
         }
         op=await get();
         if(op.state==="failed")return reply({...view(op),error:error instanceof ProxyError?error.message:"Copy failed"});
       }else{
-        await repo.transition(id,subject,"running","uncertain");
+        await repo.transition(id,subject,"dispatching","uncertain");
       }
       return reply(view(await get()));
     }
