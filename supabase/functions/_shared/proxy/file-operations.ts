@@ -33,3 +33,16 @@ export async function trashFile(id:unknown,token:string,request:typeof fetch=fet
  await google("https://www.googleapis.com/drive/v3/files/"+id+"?supportsAllDrives=true",token,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({trashed:true})},request);
  return {trashed:true};
 }
+
+export async function operationFile(id:unknown,operationId:string,token:string,request:typeof fetch=fetch) {
+  const fileId=validateId(id);
+  const response=await google("https://www.googleapis.com/drive/v3/files/"+fileId+"?fields=id,name,webViewLink,owners(me),trashed,appProperties&supportsAllDrives=true",token,{},request);
+  const data=await response.json();
+  if(!data.owners?.some((owner:{me?:boolean})=>owner.me===true)||data.appProperties?.copyToMyDriveOperation!==operationId)
+    throw new ProxyError(403,"File does not belong to this operation");
+  return {id:fileId,name:String(data.name||"download"),webViewLink:data.webViewLink,trashed:data.trashed===true};
+}
+export async function trashOperationFile(id:string,operationId:string,token:string,request:typeof fetch=fetch) {
+  const file=await operationFile(id,operationId,token,request);
+  if(!file.trashed) await trashFile(id,token,request);
+}
