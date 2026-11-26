@@ -6,7 +6,7 @@ export async function requestCancellation(repo: OperationRepository, id: string,
     const operation = await repo.get(id, owner);
     if (!operation) throw new Error("Operation not found");
     if (operation.state !== "pending" && operation.state !== "running") return operation.state;
-    const updated = await repo.transition(id, owner, operation.state, "cancel_requested");
+    const updated = await repo.transition(id, owner, operation.state, operation.state === "pending" ? "cancelled" : "cancel_requested");
     if (updated) return updated.state;
   }
   throw new Error("Operation state changed; retry cancellation");
