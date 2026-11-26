@@ -52,14 +52,14 @@ export function folderDrive(token:string,request:typeof fetch=fetch){
    return {nodes:page.files.map((m:any)=>node(m,index,parent.depth+1)) as FolderNode[],next:page.nextPageToken as string|undefined};
   },
   async create(item:FolderNode,parentId:string,operationId:string,index:number){
-   const body={name:item.name,parents:[parentId],appProperties:{copyToMyDriveOperation:operationId,copyToMyDriveNode:String(index)}};
+   const body={name:item.name,parents:[parentId],appProperties:{copyToMyDriveFolder:operationId,copyToMyDriveNode:String(index)}};
    const data=item.mimeType===FOLDER?await call("/drive/v3/files",{fields:"id",supportsAllDrives:"true"},undefined,{...body,mimeType:FOLDER}):await call("/drive/v3/files/"+item.sourceId+"/copy",{fields:"id",supportsAllDrives:"true"},item,body);
    return validateId(data.id);
   },
   async find(operationId:string,index:number){
    const ids=new Set<string>();let pageToken:string|undefined;
    do{
-    const page=await call("/drive/v3/files",{q:"'me' in owners and trashed = false and appProperties has { key='copyToMyDriveOperation' and value='"+operationId+"' } and appProperties has { key='copyToMyDriveNode' and value='"+index+"' }",fields:"nextPageToken,incompleteSearch,files(id)",pageSize:"100",...(pageToken?{pageToken}:{})});
+    const page=await call("/drive/v3/files",{q:"'me' in owners and trashed = false and appProperties has { key='copyToMyDriveFolder' and value='"+operationId+"' } and appProperties has { key='copyToMyDriveNode' and value='"+index+"' }",fields:"nextPageToken,incompleteSearch,files(id)",pageSize:"100",...(pageToken?{pageToken}:{})});
     if(page.incompleteSearch||!Array.isArray(page.files))throw Error("Incomplete recovery");
     for(const file of page.files)ids.add(validateId(file.id));
     if(page.nextPageToken&&page.nextPageToken===pageToken)throw Error("Invalid page token");
@@ -72,7 +72,7 @@ export function folderDrive(token:string,request:typeof fetch=fetch){
     const page=await call("/drive/v3/files",{q:"'"+id+"' in parents and trashed = false",fields:"incompleteSearch,nextPageToken,files(id)",pageSize:"1",supportsAllDrives:"true",includeItemsFromAllDrives:"true"});
     if(page.incompleteSearch||page.nextPageToken||!Array.isArray(page.files)||page.files.length)throw Error("Refusing to trash nonempty destination folder");
    }
-   await trashOperationFile(id,operationId,token,request);
+   await trashOperationFile(id,operationId,token,request,"copyToMyDriveFolder");
   }
  };
 }
