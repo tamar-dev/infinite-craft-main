@@ -108,7 +108,7 @@ export async function handleFolder(repo:FolderRepository,owner:string,token:stri
   if(p.state==="cleaning"){
    // Reverse order ensures descendants are cleaned before their parents.
    const node=[...p.nodes].reverse().find(n=>n.destId&&!n.cleaned);
-   if(node){await drive.trash(node.destId!,id);node.cleaned=true;}
+   if(node){await drive.trash(node.destId!,id,node.mimeType===FOLDER);node.cleaned=true;}
    if(p.nodes.every(n=>!n.destId||n.cleaned))p.state=p.failure?"failed":"cancelled";
    return reply(view(await change(row,p)));
   }
