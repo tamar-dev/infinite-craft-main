@@ -32,5 +32,5 @@ export async function authorize(req:Request,clientId:string,kind:string) {
  if(!await takeDistributed(kind+":global",120,url,key))throw new ProxyError(429,"Too many requests");
  const subject=await verifyGoogleToken(token,clientId);
  if(!await takeDistributed((await userBucket(subject))+":"+kind,10,url,key))throw new ProxyError(429,"Too many requests");
- return {token,payload};
+ return {token,payload,subject};
 }
