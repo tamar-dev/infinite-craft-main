@@ -9,9 +9,9 @@ export class FolderRepository {
   if(!response.ok)throw Error("Folder operation storage unavailable");
   return await response.json() as FolderRow[];
  }
- async get(id:string,owner:string){return (await this.query({id:"eq."+id,owner_subject:"eq."+owner}))[0]??null;}
+ async get(id:string,owner:string):Promise<FolderRow|null>{return (await this.query({id:"eq."+id,owner_subject:"eq."+owner}))[0]??null;}
  async create(id:string,owner:string,link:string){return (await this.query({},"POST",{id,owner_subject:owner,source_link:link,plan:{state:"scanning",nodes:[],cancel:false}}))[0];}
- async update(row:FolderRow,plan:FolderPlan){return (await this.query({id:"eq."+row.id,owner_subject:"eq."+row.owner_subject,version:"eq."+row.version},"PATCH",{version:row.version+1,plan,updated_at:new Date().toISOString()}))[0]??null;}
+ async update(row:FolderRow,plan:FolderPlan):Promise<FolderRow|null>{return (await this.query({id:"eq."+row.id,owner_subject:"eq."+row.owner_subject,version:"eq."+row.version},"PATCH",{version:row.version+1,plan,updated_at:new Date().toISOString()}))[0]??null;}
 }
 const terminal=(p:FolderPlan)=>["succeeded","cancelled","failed"].includes(p.state);
 export async function handleFolder(repo:FolderRepository,owner:string,token:string,payload:any,drive:FolderDrive=folderDrive(token)):Promise<Response>{
